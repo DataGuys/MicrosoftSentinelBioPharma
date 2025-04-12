@@ -678,6 +678,91 @@ EOF
     echo -e "${GREEN}✓ Onboarding Guide deployed:${NC} $workbook_name"
     return 0
 }
+# Addition to the configure_eln_connector function:
+
+function configure_eln_connector() {
+    local dce_id="$1"
+    local log_dirs="$2"
+    
+    echo -e "${BLUE}Configuring Electronic Lab Notebook (ELN) connector...${NC}"
+    
+    local dcr_name="${PREFIX}-dcr-eln-system"
+    local sentinel_ws="${PREFIX}-sentinel-ws"
+    local research_ws="${PREFIX}-research-ws"
+    local location=$(az group show --name "$RESOURCE_GROUP" --query location -o tsv)
+    
+    # [Existing code...]
+    
+    # Create JSON template for DCR with data tiering
+    local dcr_template=$(cat << EOF
+{
+  "location": "$location",
+  "properties": {
+    "dataCollectionEndpointId": "$dce_id",
+    "description": "Collects data from Electronic Lab Notebook systems with data tiering for cost optimization",
+    "dataSources": {
+      "logFiles": [
+        {
+          "name": "elnLogs",
+          "streams": ["Custom-ELN_CL"],
+          "filePatterns": $file_patterns,
+          "format": "text",
+          "settings": {
+            "text": {
+              "recordStartTimestampFormat": "ISO 8601"
+            }
+          }
+        }
+      ]
+    },
+    "destinations": {
+      "logAnalytics": [
+        {
+          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$sentinel_ws",
+          "name": "sentinelDestination"
+        },
+        {
+          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$sentinel_ws",
+          "name": "sentinelAuxDestination",
+          "dataTypeTier": "Basic"
+        },
+        {
+          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$research_ws",
+          "name": "researchDestination"
+        }
+      ]
+    },
+    "dataFlows": [
+      {
+        "streams": ["Custom-ELN_CL"],
+        "destinations": ["sentinelDestination"],
+        "transformKql": "source | where RawData has_any (\"Authentication\", \"Authorization\", \"Permission\", \"Access\", \"Copy\", \"Download\", \"Print\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\") | where not(RawData has_any (\"INFO\", \"Debug\", \"Verbose\", \"Trace\"))"
+      },
+      {
+        "streams": ["Custom-ELN_CL"],
+        "destinations": ["sentinelAuxDestination"],
+        "transformKql": "source | where RawData has_any (\"INFO\", \"Debug\", \"Verbose\", \"Trace\") | where not(RawData has_any (\"Error\", \"Failed\", \"Critical\", \"Warning\")) | extend LogType = \"Verbose\" | extend Source = \"ELN\""
+      },
+      {
+        "streams": ["Custom-ELN_CL"],
+        "destinations": ["researchDestination"]
+      }
+    ]
+  },
+  "tags": {
+    "dataType": "ELN",
+    "system": "Electronic-Lab-Notebook",
+    "regulatory": "IP-Protection,21CFR11",
+    "dataTiering": "Enabled"
+  }
+}
+EOF
+)
+    
+    # [Rest of the function]
+}
+
+# Similar updates needed for other connector functions
 
 # Main function
 function main() {
