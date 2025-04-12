@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bio-Pharmaceutical System Connector Configuration Script
+# Bio-Pharmaceutical System Connector Configuration Script - Improved Version
 # This script configures data connectors for specialized bio-pharma systems
 
 # Set color codes for output
@@ -201,17 +201,56 @@ function deploy_dce() {
     echo "$dce_id"
 }
 
-# Configure ELN (Electronic Lab Notebook) connector
-function configure_eln_connector() {
-    local dce_id="$1"
-    local log_dirs="$2"
+# Configure system DCR - unified function for all systems
+function configure_system_dcr() {
+    local system_type="$1"
+    local dce_id="$2"
+    local log_dirs="$3"
     
-    echo -e "${BLUE}Configuring Electronic Lab Notebook (ELN) connector...${NC}"
+    echo -e "${BLUE}Configuring $system_type system connector...${NC}"
     
-    local dcr_name="${PREFIX}-dcr-eln-system"
+    local dcr_name="${PREFIX}-dcr-${system_type,,}-system"
     local sentinel_ws="${PREFIX}-sentinel-ws"
-    local research_ws="${PREFIX}-research-ws"
     local location=$(az group show --name "$RESOURCE_GROUP" --query location -o tsv)
+    
+    # Determine which specialized workspace to use based on system type
+    local specialized_ws=""
+    local data_flow_kql=""
+    local system_tags=""
+    
+    case "$system_type" in
+        "ELN" | "LIMS")
+            specialized_ws="${PREFIX}-research-ws"
+            data_flow_kql="source | where RawData has_any (\"Authentication\", \"Authorization\", \"Permission\", \"Access\", \"Copy\", \"Download\", \"Print\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\")"
+            system_tags='{\"dataType\":\"'$system_type'\",\"system\":\"Research-System\",\"regulatory\":\"IP-Protection,21CFR11\"}'
+            ;;
+        "CTMS" | "PV")
+            specialized_ws="${PREFIX}-clinical-ws"
+            data_flow_kql="source | where RawData has_any (\"Authentication\", \"Authorization\", \"Permission\", \"Access\", \"PHI\", \"PII\", \"Subject\", \"Patient\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\") | extend MaskedData = replace_regex(RawData, @\"\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b\", \"***-**-****\") | extend MaskedData = replace_regex(MaskedData, @\"\\\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}\\\\b\", \"****@*****\") | project-away RawData | project-rename RawData = MaskedData"
+            system_tags='{\"dataType\":\"'$system_type'\",\"system\":\"Clinical-System\",\"regulatory\":\"HIPAA,GDPR,21CFR11\"}'
+            ;;
+        "MES" | "INSTRUMENTS")
+            specialized_ws="${PREFIX}-manufacturing-ws"
+            data_flow_kql="source | where RawData has_any (\"Authentication\", \"Authorization\", \"Configuration\", \"Recipe\", \"Parameter\", \"Change\", \"Role\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\", \"Validation\") | extend CFRCompliance = \"21CFR11\" | extend RecordIntegrityHash = hash_sha256(RawData)"
+            system_tags='{\"dataType\":\"'$system_type'\",\"system\":\"Manufacturing-System\",\"regulatory\":\"21CFR11,GxP\"}'
+            ;;
+        "COLDCHAIN")
+            specialized_ws="${PREFIX}-manufacturing-ws"
+            data_flow_kql="source | where RawData has_any (\"Temperature\", \"Threshold\", \"Alert\", \"Deviation\", \"Configuration\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\")"
+            system_tags='{\"dataType\":\"'$system_type'\",\"system\":\"Supply-Chain\",\"regulatory\":\"21CFR11,GxP\"}'
+            ;;
+        *)
+            specialized_ws="${PREFIX}-sentinel-ws"
+            data_flow_kql="source"
+            system_tags='{\"dataType\":\"'$system_type'\",\"system\":\"Custom-System\"}'
+            ;;
+    esac
+    
+    # Check if specialized workspace exists
+    if ! az monitor log-analytics workspace show --workspace-name "$specialized_ws" --resource-group "$RESOURCE_GROUP" &> /dev/null; then
+        echo -e "${YELLOW}Warning: Specialized workspace '$specialized_ws' not found. Using sentinel workspace only.${NC}"
+        specialized_ws=""
+    fi
     
     # Split log directories
     IFS=',' read -r -a log_dir_array <<< "$log_dirs"
@@ -227,22 +266,24 @@ function configure_eln_connector() {
     # Check if DCR already exists
     if az monitor data-collection rule show --name "$dcr_name" --resource-group "$RESOURCE_GROUP" &> /dev/null; then
         echo -e "${YELLOW}Data Collection Rule '$dcr_name' already exists. Skipping creation.${NC}"
-    else
-        # Create DCR for ELN
-        echo -e "${BLUE}Creating Data Collection Rule for ELN...${NC}"
-        
-        # Create JSON template for DCR
-        local dcr_template=$(cat << EOF
+        return 0
+    fi
+    
+    # Create DCR template based on system type
+    local dcr_template=""
+    
+    # Base template with sentinel destination
+    dcr_template=$(cat << EOF
 {
   "location": "$location",
   "properties": {
     "dataCollectionEndpointId": "$dce_id",
-    "description": "Collects data from Electronic Lab Notebook systems",
+    "description": "Collects data from $system_type system with data tiering for cost optimization",
     "dataSources": {
       "logFiles": [
         {
-          "name": "elnLogs",
-          "streams": ["Custom-ELN_CL"],
+          "name": "${system_type,,}Logs",
+          "streams": ["Custom-${system_type}_CL"],
           "filePatterns": $file_patterns,
           "format": "text",
           "settings": {
@@ -260,354 +301,70 @@ function configure_eln_connector() {
           "name": "sentinelDestination"
         },
         {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$research_ws",
-          "name": "researchDestination"
-        }
-      ]
-    },
-    "dataFlows": [
-      {
-        "streams": ["Custom-ELN_CL"],
-        "destinations": ["sentinelDestination"],
-        "transformKql": "source | where RawData has_any (\"Authentication\", \"Authorization\", \"Permission\", \"Access\", \"Copy\", \"Download\", \"Print\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\")"
-      },
-      {
-        "streams": ["Custom-ELN_CL"],
-        "destinations": ["researchDestination"]
-      }
-    ]
-  },
-  "tags": {
-    "dataType": "ELN",
-    "system": "Electronic-Lab-Notebook",
-    "regulatory": "IP-Protection,21CFR11"
-  }
-}
-EOF
-)
-        
-        # Create DCR using JSON template
-        echo "$dcr_template" > eln_dcr.json
-        az monitor data-collection rule create --name "$dcr_name" --resource-group "$RESOURCE_GROUP" --cli-input-json eln_dcr.json
-        rm eln_dcr.json
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to create Data Collection Rule for ELN.${NC}"
-            return 1
-        fi
-        
-        echo -e "${GREEN}✓ Created Data Collection Rule for ELN:${NC} $dcr_name"
-    fi
-    
-    return 0
-}
-
-# Configure LIMS (Laboratory Information Management System) connector
-function configure_lims_connector() {
-    local dce_id="$1"
-    local log_dirs="$2"
-    
-    echo -e "${BLUE}Configuring Laboratory Information Management System (LIMS) connector...${NC}"
-    
-    local dcr_name="${PREFIX}-dcr-lims-system"
-    local sentinel_ws="${PREFIX}-sentinel-ws"
-    local research_ws="${PREFIX}-research-ws"
-    local location=$(az group show --name "$RESOURCE_GROUP" --query location -o tsv)
-    
-    # Split log directories
-    IFS=',' read -r -a log_dir_array <<< "$log_dirs"
-    
-    # Create file pattern JSON array
-    local file_patterns="["
-    for dir in "${log_dir_array[@]}"; do
-        file_patterns+="\"$dir/*.log\","
-    done
-    file_patterns=${file_patterns%,}
-    file_patterns+="]"
-    
-    # Check if DCR already exists
-    if az monitor data-collection rule show --name "$dcr_name" --resource-group "$RESOURCE_GROUP" &> /dev/null; then
-        echo -e "${YELLOW}Data Collection Rule '$dcr_name' already exists. Skipping creation.${NC}"
-    else
-        # Create DCR for LIMS
-        echo -e "${BLUE}Creating Data Collection Rule for LIMS...${NC}"
-        
-        # Create JSON template for DCR
-        local dcr_template=$(cat << EOF
-{
-  "location": "$location",
-  "properties": {
-    "dataCollectionEndpointId": "$dce_id",
-    "description": "Collects data from Laboratory Information Management System",
-    "dataSources": {
-      "logFiles": [
-        {
-          "name": "limsLogs",
-          "streams": ["Custom-LIMS_CL"],
-          "filePatterns": $file_patterns,
-          "format": "text",
-          "settings": {
-            "text": {
-              "recordStartTimestampFormat": "ISO 8601"
-            }
-          }
-        }
-      ]
-    },
-    "destinations": {
-      "logAnalytics": [
-        {
           "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$sentinel_ws",
-          "name": "sentinelDestination"
-        },
-        {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$research_ws",
-          "name": "researchDestination"
+          "name": "sentinelAuxDestination",
+          "dataTypeTier": "Basic"
         }
-      ]
-    },
-    "dataFlows": [
-      {
-        "streams": ["Custom-LIMS_CL"],
-        "destinations": ["sentinelDestination"],
-        "transformKql": "source | where RawData has_any (\"Authentication\", \"Authorization\", \"Permission\", \"Access\", \"Sample\", \"Result\", \"Test\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\")"
-      },
-      {
-        "streams": ["Custom-LIMS_CL"],
-        "destinations": ["researchDestination"]
-      }
-    ]
-  },
-  "tags": {
-    "dataType": "LIMS",
-    "system": "Laboratory-Information-Management",
-    "regulatory": "IP-Protection,21CFR11,GxP"
-  }
-}
 EOF
-)
-        
-        # Create DCR using JSON template
-        echo "$dcr_template" > lims_dcr.json
-        az monitor data-collection rule create --name "$dcr_name" --resource-group "$RESOURCE_GROUP" --cli-input-json lims_dcr.json
-        rm lims_dcr.json
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to create Data Collection Rule for LIMS.${NC}"
-            return 1
-        fi
-        
-        echo -e "${GREEN}✓ Created Data Collection Rule for LIMS:${NC} $dcr_name"
+    
+    # Add specialized workspace if it exists
+    if [ -n "$specialized_ws" ]; then
+        dcr_template+=",
+        {
+          \"workspaceResourceId\": \"/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$specialized_ws\",
+          \"name\": \"specializedDestination\"
+        }"
     fi
     
+    # Close destinations section
+    dcr_template+="
+      ]
+    },"
+    
+    # Add data flows section
+    dcr_template+="
+    \"dataFlows\": [
+      {
+        \"streams\": [\"Custom-${system_type}_CL\"],
+        \"destinations\": [\"sentinelDestination\"],
+        \"transformKql\": \"$data_flow_kql | where not(RawData has_any (\\\"INFO\\\", \\\"Debug\\\", \\\"Verbose\\\", \\\"Trace\\\"))\"
+      },
+      {
+        \"streams\": [\"Custom-${system_type}_CL\"],
+        \"destinations\": [\"sentinelAuxDestination\"],
+        \"transformKql\": \"source | where RawData has_any (\\\"INFO\\\", \\\"Debug\\\", \\\"Verbose\\\", \\\"Trace\\\") | where not(RawData has_any (\\\"Error\\\", \\\"Failed\\\", \\\"Critical\\\", \\\"Warning\\\")) | extend LogType = \\\"Verbose\\\" | extend Source = \\\"${system_type}\\\"\"
+      }"
+    
+    # Add specialized destination if it exists
+    if [ -n "$specialized_ws" ]; then
+        dcr_template+=",
+      {
+        \"streams\": [\"Custom-${system_type}_CL\"],
+        \"destinations\": [\"specializedDestination\"]
+      }"
+    fi
+    
+    # Close dataFlows and properties
+    dcr_template+="
+    ]
+  },
+  \"tags\": $system_tags
+}"
+    
+    # Create DCR using JSON template
+    echo "$dcr_template" > system_dcr.json
+    az monitor data-collection rule create --name "$dcr_name" --resource-group "$RESOURCE_GROUP" --cli-input-json system_dcr.json
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Failed to create Data Collection Rule for $system_type.${NC}"
+        return 1
+    fi
+    
+    rm system_dcr.json
+    echo -e "${GREEN}✓ Created Data Collection Rule for $system_type:${NC} $dcr_name"
     return 0
 }
 
-# Configure CTMS (Clinical Trial Management System) connector
-function configure_ctms_connector() {
-    local dce_id="$1"
-    local log_dirs="$2"
-    
-    echo -e "${BLUE}Configuring Clinical Trial Management System (CTMS) connector...${NC}"
-    
-    local dcr_name="${PREFIX}-dcr-ctms-system"
-    local sentinel_ws="${PREFIX}-sentinel-ws"
-    local clinical_ws="${PREFIX}-clinical-ws"
-    local location=$(az group show --name "$RESOURCE_GROUP" --query location -o tsv)
-    
-    # Split log directories
-    IFS=',' read -r -a log_dir_array <<< "$log_dirs"
-    
-    # Create file pattern JSON array
-    local file_patterns="["
-    for dir in "${log_dir_array[@]}"; do
-        file_patterns+="\"$dir/*.log\","
-    done
-    file_patterns=${file_patterns%,}
-    file_patterns+="]"
-    
-    # Check if DCR already exists
-    if az monitor data-collection rule show --name "$dcr_name" --resource-group "$RESOURCE_GROUP" &> /dev/null; then
-        echo -e "${YELLOW}Data Collection Rule '$dcr_name' already exists. Skipping creation.${NC}"
-    else
-        # Create DCR for CTMS
-        echo -e "${BLUE}Creating Data Collection Rule for CTMS...${NC}"
-        
-        # Create JSON template for DCR
-        local dcr_template=$(cat << EOF
-{
-  "location": "$location",
-  "properties": {
-    "dataCollectionEndpointId": "$dce_id",
-    "description": "Collects data from Clinical Trial Management System",
-    "dataSources": {
-      "logFiles": [
-        {
-          "name": "ctmsLogs",
-          "streams": ["Custom-CTMS_CL"],
-          "filePatterns": $file_patterns,
-          "format": "text",
-          "settings": {
-            "text": {
-              "recordStartTimestampFormat": "ISO 8601"
-            }
-          }
-        }
-      ]
-    },
-    "destinations": {
-      "logAnalytics": [
-        {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$sentinel_ws",
-          "name": "sentinelDestination"
-        },
-        {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$clinical_ws",
-          "name": "clinicalDestination"
-        }
-      ]
-    },
-    "dataFlows": [
-      {
-        "streams": ["Custom-CTMS_CL"],
-        "destinations": ["sentinelDestination"],
-        "transformKql": "source | where RawData has_any (\"Authentication\", \"Authorization\", \"Permission\", \"Access\", \"PHI\", \"PII\", \"Subject\", \"Patient\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\")"
-      },
-      {
-        "streams": ["Custom-CTMS_CL"],
-        "destinations": ["clinicalDestination"],
-        "transformKql": "source | extend MaskedData = replace_regex(RawData, @\"\\\\b\\\\d{3}-\\\\d{2}-\\\\d{4}\\\\b\", \"***-**-****\") | extend MaskedData = replace_regex(MaskedData, @\"\\\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}\\\\b\", \"****@*****\") | project-away RawData | project-rename RawData = MaskedData"
-      }
-    ]
-  },
-  "tags": {
-    "dataType": "CTMS",
-    "system": "Clinical-Trial-Management",
-    "regulatory": "HIPAA,GDPR,21CFR11"
-  }
-}
-EOF
-)
-        
-        # Create DCR using JSON template
-        echo "$dcr_template" > ctms_dcr.json
-        az monitor data-collection rule create --name "$dcr_name" --resource-group "$RESOURCE_GROUP" --cli-input-json ctms_dcr.json
-        rm ctms_dcr.json
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to create Data Collection Rule for CTMS.${NC}"
-            return 1
-        fi
-        
-        echo -e "${GREEN}✓ Created Data Collection Rule for CTMS:${NC} $dcr_name"
-    fi
-    
-    return 0
-}
-
-# Configure MES (Manufacturing Execution System) connector
-function configure_mes_connector() {
-    local dce_id="$1"
-    local log_dirs="$2"
-    
-    echo -e "${BLUE}Configuring Manufacturing Execution System (MES) connector...${NC}"
-    
-    local dcr_name="${PREFIX}-dcr-mes-system"
-    local sentinel_ws="${PREFIX}-sentinel-ws"
-    local manufacturing_ws="${PREFIX}-manufacturing-ws"
-    local location=$(az group show --name "$RESOURCE_GROUP" --query location -o tsv)
-    
-    # Split log directories
-    IFS=',' read -r -a log_dir_array <<< "$log_dirs"
-    
-    # Create file pattern JSON array
-    local file_patterns="["
-    for dir in "${log_dir_array[@]}"; do
-        file_patterns+="\"$dir/*.log\","
-    done
-    file_patterns=${file_patterns%,}
-    file_patterns+="]"
-    
-    # Check if DCR already exists
-    if az monitor data-collection rule show --name "$dcr_name" --resource-group "$RESOURCE_GROUP" &> /dev/null; then
-        echo -e "${YELLOW}Data Collection Rule '$dcr_name' already exists. Skipping creation.${NC}"
-    else
-        # Create DCR for MES
-        echo -e "${BLUE}Creating Data Collection Rule for MES...${NC}"
-        
-        # Create JSON template for DCR
-        local dcr_template=$(cat << EOF
-{
-  "location": "$location",
-  "properties": {
-    "dataCollectionEndpointId": "$dce_id",
-    "description": "Collects data from Manufacturing Execution System with GxP requirements",
-    "dataSources": {
-      "logFiles": [
-        {
-          "name": "mesLogs",
-          "streams": ["Custom-MES_CL"],
-          "filePatterns": $file_patterns,
-          "format": "text",
-          "settings": {
-            "text": {
-              "recordStartTimestampFormat": "ISO 8601"
-            }
-          }
-        }
-      ]
-    },
-    "destinations": {
-      "logAnalytics": [
-        {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$sentinel_ws",
-          "name": "sentinelDestination"
-        },
-        {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$manufacturing_ws",
-          "name": "manufacturingDestination"
-        }
-      ]
-    },
-    "dataFlows": [
-      {
-        "streams": ["Custom-MES_CL"],
-        "destinations": ["sentinelDestination"],
-        "transformKql": "source | where RawData has_any (\"Authentication\", \"Authorization\", \"Configuration\", \"Recipe\", \"Parameter\", \"Change\", \"Role\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\", \"Validation\")"
-      },
-      {
-        "streams": ["Custom-MES_CL"],
-        "destinations": ["manufacturingDestination"],
-        "transformKql": "source | extend CFRCompliance = \"21CFR11\" | extend RecordIntegrityHash = hash_sha256(RawData) | extend RecordType = \"Electronic Record\""
-      }
-    ]
-  },
-  "tags": {
-    "dataType": "MES",
-    "system": "Manufacturing-Execution",
-    "regulatory": "21CFR11,GxP"
-  }
-}
-EOF
-)
-        
-        # Create DCR using JSON template
-        echo "$dcr_template" > mes_dcr.json
-        az monitor data-collection rule create --name "$dcr_name" --resource-group "$RESOURCE_GROUP" --cli-input-json mes_dcr.json
-        rm mes_dcr.json
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Failed to create Data Collection Rule for MES.${NC}"
-            return 1
-        fi
-        
-        echo -e "${GREEN}✓ Created Data Collection Rule for MES:${NC} $dcr_name"
-    fi
-    
-    return 0
-}
-
-# Function to deploy onboarding guidance for admins
+# Deploy onboarding guide workbook
 function deploy_onboarding_guide() {
     echo -e "${BLUE}Deploying bio-pharma system onboarding guidance...${NC}"
     
@@ -651,7 +408,7 @@ function deploy_onboarding_guide() {
     {
       "type": 1,
       "content": {
-        "json": "## Connection Verification\n\nAfter configuring each system, verify data is flowing correctly:\n\n1. Run the following command to check if logs are being ingested:\n\n```bash\n./validate-biopharma-compliance.sh -g \"${resourceGroup}\" -p \"${prefix}\" -r \"21CFR11,GDPR,GxP\"\n```\n\n2. Check the following tables in Log Analytics:\n   - Custom_ELN_CL\n   - Custom_LIMS_CL\n   - Custom_CTMS_CL\n   - Custom_MES_CL\n   - Custom_PV_CL\n   - Custom_Instruments_CL\n   - Custom_ColdChain_CL\n\n3. Verify alerts are being generated for security events\n\n## Compliance Documentation\n\nMaintain the following documentation:\n\n1. System connection configurations\n2. Data flow diagrams\n3. Log retention policies\n4. Data masking procedures for PHI/PII\n5. Access control lists for monitoring data"
+        "json": "## Connection Verification\n\nAfter configuring each system, verify data is flowing correctly:\n\n1. Run the following command to check if logs are being ingested:\n\n```bash\n./validate-biopharma-compliance.sh -g \"${RESOURCE_GROUP}\" -p \"${PREFIX}\" -r \"21CFR11,GDPR,GxP\"\n```\n\n2. Check the following tables in Log Analytics:\n   - Custom_ELN_CL\n   - Custom_LIMS_CL\n   - Custom_CTMS_CL\n   - Custom_MES_CL\n   - Custom_PV_CL\n   - Custom_Instruments_CL\n   - Custom_ColdChain_CL\n\n3. Verify alerts are being generated for security events\n\n## Compliance Documentation\n\nMaintain the following documentation:\n\n1. System connection configurations\n2. Data flow diagrams\n3. Log retention policies\n4. Data masking procedures for PHI/PII\n5. Access control lists for monitoring data"
       },
       "name": "text - 4"
     }
@@ -678,99 +435,17 @@ EOF
     echo -e "${GREEN}✓ Onboarding Guide deployed:${NC} $workbook_name"
     return 0
 }
-# Addition to the configure_eln_connector function:
-
-function configure_eln_connector() {
-    local dce_id="$1"
-    local log_dirs="$2"
-    
-    echo -e "${BLUE}Configuring Electronic Lab Notebook (ELN) connector...${NC}"
-    
-    local dcr_name="${PREFIX}-dcr-eln-system"
-    local sentinel_ws="${PREFIX}-sentinel-ws"
-    local research_ws="${PREFIX}-research-ws"
-    local location=$(az group show --name "$RESOURCE_GROUP" --query location -o tsv)
-    
-    # [Existing code...]
-    
-    # Create JSON template for DCR with data tiering
-    local dcr_template=$(cat << EOF
-{
-  "location": "$location",
-  "properties": {
-    "dataCollectionEndpointId": "$dce_id",
-    "description": "Collects data from Electronic Lab Notebook systems with data tiering for cost optimization",
-    "dataSources": {
-      "logFiles": [
-        {
-          "name": "elnLogs",
-          "streams": ["Custom-ELN_CL"],
-          "filePatterns": $file_patterns,
-          "format": "text",
-          "settings": {
-            "text": {
-              "recordStartTimestampFormat": "ISO 8601"
-            }
-          }
-        }
-      ]
-    },
-    "destinations": {
-      "logAnalytics": [
-        {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$sentinel_ws",
-          "name": "sentinelDestination"
-        },
-        {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$sentinel_ws",
-          "name": "sentinelAuxDestination",
-          "dataTypeTier": "Basic"
-        },
-        {
-          "workspaceResourceId": "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$research_ws",
-          "name": "researchDestination"
-        }
-      ]
-    },
-    "dataFlows": [
-      {
-        "streams": ["Custom-ELN_CL"],
-        "destinations": ["sentinelDestination"],
-        "transformKql": "source | where RawData has_any (\"Authentication\", \"Authorization\", \"Permission\", \"Access\", \"Copy\", \"Download\", \"Print\") or RawData has_any (\"Failed\", \"Error\", \"Warning\", \"Critical\", \"Denied\") | where not(RawData has_any (\"INFO\", \"Debug\", \"Verbose\", \"Trace\"))"
-      },
-      {
-        "streams": ["Custom-ELN_CL"],
-        "destinations": ["sentinelAuxDestination"],
-        "transformKql": "source | where RawData has_any (\"INFO\", \"Debug\", \"Verbose\", \"Trace\") | where not(RawData has_any (\"Error\", \"Failed\", \"Critical\", \"Warning\")) | extend LogType = \"Verbose\" | extend Source = \"ELN\""
-      },
-      {
-        "streams": ["Custom-ELN_CL"],
-        "destinations": ["researchDestination"]
-      }
-    ]
-  },
-  "tags": {
-    "dataType": "ELN",
-    "system": "Electronic-Lab-Notebook",
-    "regulatory": "IP-Protection,21CFR11",
-    "dataTiering": "Enabled"
-  }
-}
-EOF
-)
-    
-    # [Rest of the function]
-}
-
-# Similar updates needed for other connector functions
 
 # Main function
 function main() {
+    echo -e "${BLUE}=================================================${NC}"
+    echo -e "${GREEN}Bio-Pharma System Connectors Configuration${NC}"
+    echo -e "${BLUE}=================================================${NC}"
+    
     parse_args "$@"
     check_dependencies
     validate_workspaces
     
-    echo -e "${BLUE}========== Bio-Pharma System Connectors Configuration ==========${NC}"
     echo -e "${BLUE}Resource Group:${NC} $RESOURCE_GROUP"
     echo -e "${BLUE}Prefix:${NC} $PREFIX"
     echo -e "${BLUE}Systems:${NC} ${SYSTEMS[*]}"
@@ -789,27 +464,11 @@ function main() {
         # Get log directories for this system
         local log_dirs="${LOG_DIRS[$index]}"
         
-        case "$system" in
-            "ELN")
-                configure_eln_connector "$dce_id" "$log_dirs"
-                [ $? -eq 0 ] && ((success_count++))
-                ;;
-            "LIMS")
-                configure_lims_connector "$dce_id" "$log_dirs"
-                [ $? -eq 0 ] && ((success_count++))
-                ;;
-            "CTMS")
-                configure_ctms_connector "$dce_id" "$log_dirs"
-                [ $? -eq 0 ] && ((success_count++))
-                ;;
-            "MES")
-                configure_mes_connector "$dce_id" "$log_dirs"
-                [ $? -eq 0 ] && ((success_count++))
-                ;;
-            *)
-                echo -e "${YELLOW}Connector configuration for $system not implemented${NC}"
-                ;;
-        esac
+        # Configure system using unified function
+        configure_system_dcr "$system" "$dce_id" "$log_dirs"
+        if [ $? -eq 0 ]; then
+            ((success_count++))
+        fi
         
         ((index++))
     done
