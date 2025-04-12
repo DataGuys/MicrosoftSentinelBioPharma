@@ -18,6 +18,9 @@ param environment string = 'prod'
 @description('Tags to apply to all resources')
 param tags object = {}
 
+@description('Deployment timestamp')
+param deploymentTimestamp string = utcNow('yyyy-MM-dd')
+
 @description('Default retention days for Log Analytics Workspaces')
 param defaultRetentionDays int = 2557  // 7 years for 21 CFR Part 11 compliance
 
@@ -81,12 +84,15 @@ var resourceNames = {
 }
 
 // Improved tags that include standardized metadata
-var resourceTags = union(tags, {
-  'environment': environment
-  'application': 'Microsoft Sentinel'
+var standardTags = {
+  environment: environment
+  application: 'Microsoft Sentinel'
   'business-unit': 'Security'
-  'deployment-date': utcNow('yyyy-MM-dd')
-})
+  'deployment-date': deploymentTimestamp
+}
+
+// Combine standard tags with provided tags
+var mergedTags = union(tags, standardTags)
 
 // --------------------- LOG ANALYTICS CLUSTER (OPTIONAL) -----------------------
 
@@ -94,7 +100,7 @@ var resourceTags = union(tags, {
 resource laCluster 'Microsoft.OperationalInsights/clusters@2021-06-01' = if (useLogAnalyticsCluster) {
   name: resourceNames.laCluster
   location: location
-  tags: resourceTags
+  tags: mergedTags
   properties: {
     sku: {
       name: 'CapacityReservation'
@@ -114,10 +120,10 @@ resource laCluster 'Microsoft.OperationalInsights/clusters@2021-06-01' = if (use
 resource sentinelWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: resourceNames.sentinelWorkspace
   location: location
-  tags: union(resourceTags, {
-    'workspaceType': 'Global-SOC'
-    'dataClassification': 'Confidential'
-    'complianceFrameworks': 'GDPR,HIPAA,21CFR11,SOX'
+  tags: union(mergedTags, {
+    workspaceType: 'Global-SOC'
+    dataClassification: 'Confidential'
+    complianceFrameworks: 'GDPR,HIPAA,21CFR11,SOX'
   })
   properties: {
     sku: {
@@ -152,11 +158,11 @@ resource sentinelWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
 resource researchWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: resourceNames.researchWorkspace
   location: location
-  tags: union(resourceTags, {
-    'workspaceType': 'Research'
-    'dataClassification': 'Highly-Confidential'
-    'complianceFrameworks': 'IP-Protection,SOX'
-    'dataType': 'Intellectual-Property'
+  tags: union(mergedTags, {
+    workspaceType: 'Research'
+    dataClassification: 'Highly-Confidential'
+    complianceFrameworks: 'IP-Protection,SOX'
+    dataType: 'Intellectual-Property'
   })
   properties: {
     sku: {
@@ -191,11 +197,11 @@ resource researchWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
 resource manufacturingWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: resourceNames.manufacturingWorkspace
   location: location
-  tags: union(resourceTags, {
-    'workspaceType': 'Manufacturing'
-    'dataClassification': 'Confidential'
-    'complianceFrameworks': '21CFR11,GxP,SOX'
-    'dataType': 'Manufacturing-Systems'
+  tags: union(mergedTags, {
+    workspaceType: 'Manufacturing'
+    dataClassification: 'Confidential'
+    complianceFrameworks: '21CFR11,GxP,SOX'
+    dataType: 'Manufacturing-Systems'
   })
   properties: {
     sku: {
@@ -230,11 +236,11 @@ resource manufacturingWorkspace 'Microsoft.OperationalInsights/workspaces@2022-1
 resource clinicalWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: resourceNames.clinicalWorkspace
   location: location
-  tags: union(resourceTags, {
-    'workspaceType': 'Clinical'
-    'dataClassification': 'Protected-Health-Information'
-    'complianceFrameworks': 'HIPAA,GDPR,21CFR11'
-    'dataType': 'Clinical-Trial-Data'
+  tags: union(mergedTags, {
+    workspaceType: 'Clinical'
+    dataClassification: 'Protected-Health-Information'
+    complianceFrameworks: 'HIPAA,GDPR,21CFR11'
+    dataType: 'Clinical-Trial-Data'
   })
   properties: {
     sku: {
@@ -281,7 +287,13 @@ resource enableSentinel 'Microsoft.SecurityInsights/onboardingStates@2023-05-01'
   properties: {}
 }
 
-// [Rest of the file remains the same...]
+// Create a query pack for specialized bio-pharma queries
+resource bioPharmaQueries 'Microsoft.OperationalInsights/queryPacks@2019-09-01' = {
+  name: resourceNames.queryPack
+  location: location
+  tags: mergedTags
+  properties: {}
+}
 
 // Output workspace IDs and names for reference
 output sentinelWorkspaceId string = sentinelWorkspace.id
@@ -295,4 +307,4 @@ output manufacturingWorkspaceName string = manufacturingWorkspace.name
 output clinicalWorkspaceName string = clinicalWorkspace.name
 
 output laClusterId string = useLogAnalyticsCluster ? laCluster.id : 'Not deployed'
-output queryPackId string = bioPharmaQueryPack.id
+output queryPackId string = bioPharmaQueries.id
