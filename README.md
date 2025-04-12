@@ -24,9 +24,9 @@ Deploy this solution directly in Azure Cloud Shell:
 mkdir -p ~/MicrosoftSentinelBioPharma && git clone https://github.com/DataGuys/MicrosoftSentinelBioPharma.git ~/MicrosoftSentinelBioPharma && cd ~/MicrosoftSentinelBioPharma && chmod +x *.sh && ./deploy.sh -g "rg-sentinel-biopharma" -l "eastus2" -p "bp" -e "prod"
 ```
 
-> **Note**: You may see Bicep warnings during deployment related to property validations (BCP037, BCP081). These warnings are expected and won't prevent successful deployment. 
+> **Note**: You may see Bicep warnings during deployment related to property validations. These warnings are expected and won't prevent successful deployment.
 >
-> **Important**: By default, the template configures retention periods that work with the standard Log Analytics SKUs. For long-term retention needs (7+ years required by regulations like 21 CFR Part 11), use a higher-tier SKU or implement the Azure Data Export feature to archive logs in storage accounts.
+> **Important**: This deployment creates the core Azure Sentinel infrastructure. For regulatory compliance with long-term retention requirements (such as 21 CFR Part 11's 7+ year requirement), additional configuration of Data Export to immutable storage is required after deployment.
 
 ## Solution Components
 
