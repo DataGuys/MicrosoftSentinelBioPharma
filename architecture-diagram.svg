@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1000" height="700" fill="#f8f9fa" />
+  
+  <!-- Title -->
+  <text x="500" y="40" font-family="Segoe UI, Arial, sans-serif" font-size="24" fill="#0078d4" text-anchor="middle" font-weight="bold">Microsoft Sentinel for Bio-Pharmaceutical Organizations</text>
+  
+  <!-- Azure Cloud Border -->
+  <rect x="50" y="70" width="900" height="580" rx="10" ry="10" fill="#f0f8ff" stroke="#0078d4" stroke-width="2" stroke-dasharray="5,5" />
+  <text x="70" y="90" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#0078d4">Microsoft Azure</text>
+  
+  <!-- Central Sentinel Workspace -->
+  <rect x="350" y="120" width="300" height="120" rx="8" ry="8" fill="#0078d4" stroke="#005a9e" stroke-width="2" />
+  <text x="500" y="160" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="white" text-anchor="middle" font-weight="bold">Central Sentinel Workspace</text>
+  <text x="500" y="185" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="white" text-anchor="middle">Global Security Operations Center</text>
+  <image x="370" y="130" width="40" height="40" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTEyIDEuNUwxMSAxLjFWN0wxMiA3LjVMMTMgN1YxLjFMMTIgMS41WiIgZmlsbD0id2hpdGUiLz4KPHBhdGggZD0iTTEyIDIyLjVMMTMgMjIuOVYxN0wxMiAxNi41TDExIDE3VjIyLjlMMTIgMjIuNVoiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0xLjUgMTJMMS4xIDExSDdMNy41IDEyTDcgMTNIMS4xTDEuNSAxMloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yMi41IDEyTDIyLjkgMTNIMTdMMTYuNSAxMkwxNyAxMUgyMi45TDIyLjUgMTJaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMy45IDVMNi4xIDcuMkw3LjUgNS44TDUuMyAzLjZMMy45IDVaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMjAuMSAxOUwxNy45IDE2LjhMMTYuNSAxOC4yTDE4LjcgMjAuNEwyMC4xIDE5WiIgZmlsbD0id2hpdGUiLz4KPHBhdGggZD0iTTUgMjAuMUwzLjYgMTguN0w1LjggMTYuNUw3LjIgMTcuOUw1IDIwLjFaIiBmaWxsPSJ3aGl0ZSIvPgo8cGF0aCBkPSJNMTkgMy45TDIwLjQgNS4zTDE4LjIgNy41TDE2LjggNi4xTDE5IDMuOVoiIGZpbGw9IndoaXRlIi8+Cjwvc3ZnPg==" />
+  
+  <!-- Specialized Workspaces -->
+  <rect x="100" y="280" width="200" height="100" rx="8" ry="8" fill="#50e6ff" stroke="#0078d4" stroke-width="2" />
+  <text x="200" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#000" text-anchor="middle" font-weight="bold">Research Workspace</text>
+  <text x="200" y="330" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">IP Protection</text>
+  <text x="200" y="350" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">ELN, LIMS, Instruments</text>
+  
+  <rect x="400" y="280" width="200" height="100" rx="8" ry="8" fill="#50e6ff" stroke="#0078d4" stroke-width="2" />
+  <text x="500" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#000" text-anchor="middle" font-weight="bold">Clinical Workspace</text>
+  <text x="500" y="330" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">Patient Data Protection</text>
+  <text x="500" y="350" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">CTMS, PV, Clinical Trials</text>
+  
+  <rect x="700" y="280" width="200" height="100" rx="8" ry="8" fill="#50e6ff" stroke="#0078d4" stroke-width="2" />
+  <text x="800" y="310" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#000" text-anchor="middle" font-weight="bold">Manufacturing Workspace</text>
+  <text x="800" y="330" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">GxP Compliance</text>
+  <text x="800" y="350" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">MES, QMS, Production</text>
+  
+  <!-- Regional Workspaces -->
+  <rect x="100" y="420" width="180" height="70" rx="8" ry="8" fill="#b2f0ff" stroke="#0078d4" stroke-width="2" />
+  <text x="190" y="455" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#000" text-anchor="middle" font-weight="bold">US Region</text>
+  <text x="190" y="475" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">FDA, HIPAA</text>
+  
+  <rect x="310" y="420" width="180" height="70" rx="8" ry="8" fill="#b2f0ff" stroke="#0078d4" stroke-width="2" />
+  <text x="400" y="455" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#000" text-anchor="middle" font-weight="bold">EU Region</text>
+  <text x="400" y="475" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">EMA, GDPR</text>
+  
+  <rect x="520" y="420" width="180" height="70" rx="8" ry="8" fill="#b2f0ff" stroke="#0078d4" stroke-width="2" />
+  <text x="610" y="455" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#000" text-anchor="middle" font-weight="bold">APAC Region</text>
+  <text x="610" y="475" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">PMDA, CDSCO</text>
+  
+  <rect x="730" y="420" width="180" height="70" rx="8" ry="8" fill="#b2f0ff" stroke="#0078d4" stroke-width="2" />
+  <text x="820" y="455" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#000" text-anchor="middle" font-weight="bold">LATAM Region</text>
+  <text x="820" y="475" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000" text-anchor="middle">ANVISA, COFEPRIS</text>
+  
+  <!-- Enhanced Features -->
+  <rect x="90" y="520" width="180" height="110" rx="8" ry="8" fill="#ffd7e6" stroke="#0078d4" stroke-width="2" />
+  <text x="180" y="540" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#000" text-anchor="middle" font-weight="bold">Enhanced Features</text>
+  <text x="180" y="560" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle">• ML-Based Anomaly Detection</text>
+  <text x="180" y="580" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle">• Supply Chain Security</text>
+  <text x="180" y="600" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle">• Container Security</text>
+  <text x="180" y="620" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle">• Attack Simulation</text>
+  
+  <!-- Regulatory Compliance -->
+  <rect x="310" y="520" width="180" height="110" rx="8" ry="8" fill="#f3f2f1" stroke="#0078d4" stroke-width="2" />
+  <text x="400" y="540" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#000" text-anchor="middle" font-weight="bold">Regulatory Compliance</text>
+  <text x="400" y="560" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle">• 21 CFR Part 11</text>
+  <text x="400" y="580" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle">• GDPR / HIPAA</text>
+  <text x="400" y="600" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle">• GxP Compliance</text>
+  <text x="400" y="620" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle">• Compliance Dashboard</text>
+  
+  <!-- Data Sources -->
+  <rect x="525" y="520" width="385" height="110" rx="8" ry="8" fill="#d0ebff" stroke="#0078d4" stroke-width="2" />
+  <text x="715" y="540" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#000" text-anchor="middle" font-weight="bold">Bio-Pharma Data Sources</text>
+  
+  <rect x="535" y="555" width="110" height="65" rx="5" ry="5" fill="#f3f2f1" stroke="#0078d4" stroke-width="1" />
+  <text x="590" y="575" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle" font-weight="bold">Research</text>
+  <text x="590" y="595" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#000" text-anchor="middle">• ELN Systems</text>
+  <text x="590" y="610" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#000" text-anchor="middle">• LIMS</text>
+  
+  <rect x="660" y="555" width="110" height="65" rx="5" ry="5" fill="#f3f2f1" stroke="#0078d4" stroke-width="1" />
+  <text x="715" y="575" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle" font-weight="bold">Clinical</text>
+  <text x="715" y="595" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#000" text-anchor="middle">• CTMS</text>
+  <text x="715" y="610" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#000" text-anchor="middle">• PV Systems</text>
+  
+  <rect x="785" y="555" width="110" height="65" rx="5" ry="5" fill="#f3f2f1" stroke="#0078d4" stroke-width="1" />
+  <text x="840" y="575" font-family="Segoe UI, Arial, sans-serif" font-size="11" fill="#000" text-anchor="middle" font-weight="bold">Manufacturing</text>
+  <text x="840" y="595" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#000" text-anchor="middle">• MES/SCADA</text>
+  <text x="840" y="610" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#000" text-anchor="middle">• Cold Chain</text>
+  
+  <!-- Multi-tenant Components -->
+  <rect x="200" y="250" width="600" height="20" rx="5" ry="5" fill="#ffc8dd" stroke="#d83b01" stroke-width="2" />
+  <text x="500" y="265" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#d83b01" text-anchor="middle" font-weight="bold">Multi-Tenant Support Configuration</text>
+  
+  <!-- Connection Lines -->
+  <!-- Central to Specialized -->
+  <line x1="500" y1="240" x2="500" y2="250" stroke="#0078d4" stroke-width="2" />
+  <line x1="200" y1="240" x2="200" y2="280" stroke="#0078d4" stroke-width="2" />
+  <line x1="500" y1="240" x2="500" y2="280" stroke="#0078d4" stroke-width="2" />
+  <line x1="800" y1="240" x2="800" y2="280" stroke="#0078d4" stroke-width="2" />
+  <line x1="200" y1="240" x2="800" y2="240" stroke="#0078d4" stroke-width="2" />
+  
+  <!-- Specialized to Regional -->
+  <line x1="200" y1="380" x2="200" y2="420" stroke="#0078d4" stroke-width="2" />
+  <line x1="500" y1="380" x2="500" y2="400" stroke="#0078d4" stroke-width="2" />
+  <line x1="800" y1="380" x2="800" y2="400" stroke="#0078d4" stroke-width="2" />
+  <line x1="400" y1="400" x2="820" y2="400" stroke="#0078d4" stroke-width="2" />
+  <line x1="400" y1="400" x2="400" y2="420" stroke="#0078d4" stroke-width="2" />
+  <line x1="610" y1="400" x2="610" y2="420" stroke="#0078d4" stroke-width="2" />
+  <line x1="820" y1="400" x2="820" y2="420" stroke="#0078d4" stroke-width="2" />
+  
+  <!-- Regional to Features -->
+  <line x1="200" y1="490" x2="200" y2="520" stroke="#0078d4" stroke-width="2" />
+  <line x1="400" y1="490" x2="400" y2="520" stroke="#0078d4" stroke-width="2" />
+  <line x1="610" y1="490" x2="610" y2="510" stroke="#0078d4" stroke-width="2" />
+  <line x1="820" y1="490" x2="820" y2="510" stroke="#0078d4" stroke-width="2" />
+  <line x1="200" y1="490" x2="820" y2="490" stroke="#0078d4" stroke-width="2" />
+  <line x1="715" y1="510" x2="715" y2="520" stroke="#0078d4" stroke-width="2" />
+  <line x1="610" y1="510" x2="820" y2="510" stroke="#0078d4" stroke-width="2" />
+  
+  <!-- On-Prem Systems -->
+  <rect x="50" y="650" width="900" height="30" rx="5" ry="5" fill="#f3f2f1" stroke="#000" stroke-width="1" />
+  <text x="500" y="670" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#000" text-anchor="middle">On-Premises Bio-Pharmaceutical Systems and Research Facilities (80+ Countries)</text>
+  
+  <!-- Connection to On-Prem -->
+  <line x1="500" y1="630" x2="500" y2="650" stroke="#0078d4" stroke-width="2" stroke-dasharray="5,5" />
+  
+  <!-- Legend -->
+  <rect x="845" y="110" width="15" height="15" fill="#0078d4" />
+  <text x="865" y="123" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000">Central Workspace</text>
+  
+  <rect x="845" y="135" width="15" height="15" fill="#50e6ff" />
+  <text x="865" y="148" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000">Specialized Workspaces</text>
+  
+  <rect x="845" y="160" width="15" height="15" fill="#b2f0ff" />
+  <text x="865" y="173" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000">Regional Workspaces</text>
+  
+  <rect x="845" y="185" width="15" height="15" fill="#ffd7e6" />
+  <text x="865" y="198" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000">Enhanced Features</text>
+  
+  <rect x="845" y="210" width="15" height="15" fill="#ffc8dd" />
+  <text x="865" y="223" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#000">Multi-Tenant Support</text>
+
+</svg>
