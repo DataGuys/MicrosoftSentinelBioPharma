@@ -2,7 +2,7 @@
 
 This repository contains a comprehensive implementation for deploying Azure Sentinel in large bio-pharmaceutical organizations with operations across multiple countries and complex regulatory requirements.
 
-![Bio-Pharma Sentinel Architecture](/architecture-diagram.svg)
+![Bio-Pharma Sentinel Architecture](https://raw.githubusercontent.com/DataGuys/MicrosoftSentinelBioPharma/main/architecture-diagram.svg)
 
 ## Overview
 
@@ -15,6 +15,14 @@ Global bio-pharmaceutical organizations face unique security monitoring challeng
 * Complex supply chain and third-party ecosystem
 
 This implementation provides a comprehensive security monitoring solution using the Enterprise-Scale Azure Sentinel architecture with bio-pharma-specific optimizations and enhancements.
+
+## Quick Deployment
+
+Deploy this solution directly in Azure Cloud Shell:
+
+```bash
+wget -O deploy.sh https://raw.githubusercontent.com/DataGuys/MicrosoftSentinelBioPharma/main/deploy.sh && chmod +x deploy.sh && ./deploy.sh -g "rg-sentinel-biopharma" -l "eastus2" -p "bp" -e "prod"
+```
 
 ## Solution Components
 
@@ -46,7 +54,7 @@ This implementation provides a comprehensive security monitoring solution using 
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/MicrosoftSentinelBioPharma.git
+git clone https://github.com/DataGuys/MicrosoftSentinelBioPharma.git
 cd MicrosoftSentinelBioPharma
 ```
 
