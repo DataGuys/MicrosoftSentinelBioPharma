@@ -1,100 +1,310 @@
-// Bio-Pharma Analytics Rules Module - Enhanced Version
-// Deploys specialized rules for pharmaceutical environments with improved detection capabilities
+// Add these rules after the existing ones
 
-@description('Prefix to use for resource naming')
-param prefix string
-
-@description('Environment (dev, test, prod)')
-@allowed([
-  'dev'
-  'test'
-  'prod'
-])
-param environment string = 'prod'
-
-@description('Name of the central Sentinel workspace')
-param sentinelWorkspaceName string
-
-@description('Name of the research workspace')
-param researchWorkspaceName string
-
-@description('Name of the manufacturing workspace') 
-param manufacturingWorkspaceName string
-
-@description('Name of the clinical workspace')
-param clinicalWorkspaceName string
-
-// Improved resource naming
-var resourceNames = {
-  elnMassDownloadRule: '${prefix}-${environment}-rule-eln-mass-download'
-  phiAccessRule: '${prefix}-${environment}-rule-phi-access'
-  gxpSystemChangeRule: '${prefix}-${environment}-rule-gxp-system-change'
-  crossBorderIPAccessRule: '${prefix}-${environment}-rule-cross-border-ip'
-  coldChainAuthRule: '${prefix}-${environment}-rule-cold-chain-auth'
-  labInstrumentAnomalyRule: '${prefix}-${environment}-rule-lab-instrument-anomaly'
-  electronicRecordIntegrityRule: '${prefix}-${environment}-rule-electronic-record'
-  afterHoursResearchRule: '${prefix}-${environment}-rule-after-hours-research'
-}
-
-// Reference to Sentinel workspace (for scoping)
-resource sentinelWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' existing = {
-  name: sentinelWorkspaceName
-}
-
-// --------------------- BIO-PHARMA SPECIFIC ANALYTICS RULES -----------------------
-
-// 1. Intellectual Property Protection - ELN Mass Download Detection (Enhanced)
-resource elnMassDownloadRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' = {
-  name: guid(resourceNames.elnMassDownloadRule)
+// 3. GxP System Monitoring - Manufacturing Change Detection
+resource gxpSystemChangeRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' = {
+  name: guid(resourceNames.gxpSystemChangeRule)
   kind: 'Scheduled'
   scope: sentinelWorkspace
   properties: {
-    displayName: 'ELN Mass Document Download Detection'
-    description: 'This rule detects large-scale document downloads from Electronic Lab Notebooks, which may indicate intellectual property theft attempts'
+    displayName: 'GxP System - Unauthorized Configuration Change'
+    description: 'Detects unauthorized changes to GxP-validated manufacturing systems'
     severity: 'High'
     enabled: true
     query: '''
-      // Improved detection with better contextual data
-      Custom-ELN_CL
-      | where RawData has_any ("Download", "Export", "Print", "Copy", "Save", "SaveAs")
+      // Enhanced detection for GxP system changes
+      Custom-MES_CL
+      | where RawData has_any ("Configuration", "Recipe", "Parameter", "Change", "Setting")
       | extend UserName = extract("User[:\\s]+([\\w\\-\\.@]+)", 1, RawData)
-      | extend DocumentCount = extract("Count[:\\s]+(\\d+)", 1, RawData)
-      | extend DocumentType = extract("Type[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend DocumentSize = extract("Size[:\\s]+(\\d+)", 1, RawData)
-      | extend DataClassification = extract("Classification[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend AccessTime = TimeGenerated
-      | extend ClientIP = extract("IP[:\\s]+([\\d\\.]+)", 1, RawData)
-      | extend UserDepartment = extract("Department[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend SystemName = extract("System[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend ChangeType = extract("Change[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend ChangeID = extract("ChangeID[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend ValidationStatus = extract("ValidationStatus[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | where ValidationStatus has_any ("Validated", "Qualified", "Production")
+      | where isempty(ChangeID) or ChangeID == "" or ChangeID == "None"
+      | project TimeGenerated, UserName, SystemName, ChangeType, ValidationStatus
+    '''
+    queryFrequency: 'PT15M'
+    queryPeriod: 'PT1H'
+    triggerOperator: 'GreaterThan'
+    triggerThreshold: 0
+    suppressionDuration: 'PT1H'
+    suppressionEnabled: false
+    tactics: [
+      'Persistence'
+      'PrivilegeEscalation'
+    ]
+    techniques: [
+      'T1078' // Valid Accounts
+      'T1098' // Account Manipulation
+    ]
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          {
+            identifier: 'Name'
+            columnName: 'UserName'
+          }
+        ]
+      }
+    ]
+    alertDetailsOverride: {
+      alertDisplayNameFormat: 'GxP System Change Alert: {{UserName}} modified {{SystemName}}'
+      alertDescriptionFormat: 'User {{UserName}} performed unauthorized {{ChangeType}} change to validated system {{SystemName}} without a change control ID'
+    }
+  }
+}
+
+// 4. Cross-Border IP Access Detection
+resource crossBorderIPAccessRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' = {
+  name: guid(resourceNames.crossBorderIPAccessRule)
+  kind: 'Scheduled'
+  scope: sentinelWorkspace
+  properties: {
+    displayName: 'Cross-Border IP Access Detection'
+    description: 'Detects access to intellectual property from unexpected geographic locations'
+    severity: 'Medium'
+    enabled: true
+    query: '''
+      // Cross-border IP access detection
+      union Custom-ELN_CL, Custom-LIMS_CL
+      | where RawData has_any ("IP", "Research", "Formula", "Confidential", "Restricted")
+      | extend UserName = extract("User[:\\s]+([\\w\\-\\.@]+)", 1, RawData)
+      | extend ResourceName = extract("Resource[:\\s]+([\\w\\-\\.]+)", 1, RawData)
       | extend UserLocation = extract("Location[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | where isnotempty(DocumentCount) and (
-          toint(DocumentCount) > 10 or                     // More than 10 documents
-          toint(DocumentSize) > 50000000 or                // More than 50MB
-          (isnotempty(DataClassification) and DataClassification has_any ("IP", "Research", "Formula", "Confidential", "Restricted"))
-        )
-      // Add time window context to identify rapid downloads
-      | summarize 
-          DocumentsDownloaded = sum(toint(DocumentCount)), 
-          TotalSize = sum(toint(DocumentSize)),
-          Documents = make_set(DocumentType, 10),
-          DataClasses = make_set(DataClassification, 10),
-          ClientIPs = make_set(ClientIP),
-          TimeStamps = make_set(AccessTime, 10)
-          by UserName, UserDepartment, UserLocation, bin(TimeGenerated, 1h)
-      | where DocumentsDownloaded > 10 or TotalSize > 100000000
+      | extend DataLocation = extract("DataLocation[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend DataClassification = extract("Classification[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | where isnotempty(UserLocation) and isnotempty(DataLocation) and UserLocation != DataLocation
+      | where DataClassification has_any ("IP", "Research", "Formula", "Confidential", "Restricted")
+      | project TimeGenerated, UserName, ResourceName, UserLocation, DataLocation, DataClassification
+    '''
+    queryFrequency: 'PT1H'
+    queryPeriod: 'PT4H'
+    triggerOperator: 'GreaterThan'
+    triggerThreshold: 0
+    suppressionDuration: 'PT1H'
+    suppressionEnabled: false
+    tactics: [
+      'Exfiltration'
+      'Collection'
+    ]
+    techniques: [
+      'T1048' // Exfiltration Over Alternative Protocol
+      'T1213' // Data from Information Repositories
+    ]
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          {
+            identifier: 'Name'
+            columnName: 'UserName'
+          }
+        ]
+      }
+    ]
+  }
+}
+
+// 5. Cold Chain Monitoring Alert
+resource coldChainAuthRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' = {
+  name: guid(resourceNames.coldChainAuthRule)
+  kind: 'Scheduled'
+  scope: sentinelWorkspace
+  properties: {
+    displayName: 'Cold Chain Monitoring System Alert'
+    description: 'Detects unauthorized access or changes to cold chain monitoring systems'
+    severity: 'High'
+    enabled: true
+    query: '''
+      // Cold chain monitoring alert
+      Custom-COLDCHAIN_CL
+      | where RawData has_any ("Temperature", "Threshold", "Alert", "Deviation", "Configuration")
+      | extend UserName = extract("User[:\\s]+([\\w\\-\\.@]+)", 1, RawData)
+      | extend SystemID = extract("System[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend ActionType = extract("Action[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend OldValue = extract("OldValue[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend NewValue = extract("NewValue[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend ChangeID = extract("ChangeID[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | where ActionType has_any ("Threshold", "Configuration", "Setting", "Parameter") 
+      | where isempty(ChangeID) or ChangeID == "" or ChangeID == "None"
+      | project TimeGenerated, UserName, SystemID, ActionType, OldValue, NewValue
+    '''
+    queryFrequency: 'PT15M'
+    queryPeriod: 'PT1H'
+    triggerOperator: 'GreaterThan'
+    triggerThreshold: 0
+    suppressionDuration: 'PT1H'
+    suppressionEnabled: false
+    tactics: [
+      'Impact'
+      'Persistence'
+    ]
+    techniques: [
+      'T1078' // Valid Accounts
+      'T1565' // Data Manipulation
+    ]
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          {
+            identifier: 'Name'
+            columnName: 'UserName'
+          }
+        ]
+      }
+    ]
+  }
+}
+
+// 6. Lab Instrument Anomaly Detection
+resource labInstrumentAnomalyRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' = {
+  name: guid(resourceNames.labInstrumentAnomalyRule)
+  kind: 'Scheduled'
+  scope: sentinelWorkspace
+  properties: {
+    displayName: 'Laboratory Instrument Anomaly Detection'
+    description: 'Detects unusual behavior or manipulation of laboratory instruments'
+    severity: 'Medium'
+    enabled: true
+    query: '''
+      // Laboratory instrument anomaly detection
+      Custom-Instruments_CL
+      | where RawData has_any ("Error", "Failed", "Critical", "Security", "Unauthorized", "Alert", "Unexpected")
+      | extend InstrumentID = extract("Instrument[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend ReadingType = extract("Reading[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend ActionType = extract("Action[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend OperatorID = extract("Operator[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend ErrorType = extract("Error[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | project TimeGenerated, InstrumentID, ReadingType, ActionType, OperatorID, ErrorType
+    '''
+    queryFrequency: 'PT30M'
+    queryPeriod: 'PT6H'
+    triggerOperator: 'GreaterThan'
+    triggerThreshold: 0
+    suppressionDuration: 'PT1H'
+    suppressionEnabled: false
+    tactics: [
+      'Impact'
+      'Collection'
+    ]
+    techniques: [
+      'T1565' // Data Manipulation
+      'T1213' // Data from Information Repositories
+    ]
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          {
+            identifier: 'Name'
+            columnName: 'OperatorID'
+          }
+        ]
+      }
+    ]
+  }
+}
+
+// 7. Electronic Record Integrity Validation
+resource electronicRecordIntegrityRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' = {
+  name: guid(resourceNames.electronicRecordIntegrityRule)
+  kind: 'Scheduled'
+  scope: sentinelWorkspace
+  properties: {
+    displayName: 'Electronic Record Integrity Validation'
+    description: 'Detects potential tampering with electronic records for 21 CFR Part 11 compliance'
+    severity: 'High'
+    enabled: true
+    query: '''
+      // Electronic record integrity validation
+      union 
+        Custom-MES_CL, 
+        Custom-ELN_CL,
+        Custom-LIMS_CL,
+        Custom-CTMS_CL
+      | where RawData has_any ("Signature", "Validation", "Hash", "Checksum", "Integrity", "Record")
+      | extend UserName = extract("User[:\\s]+([\\w\\-\\.@]+)", 1, RawData)
+      | extend RecordID = extract("RecordID[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend SignatureStatus = extract("SignatureStatus[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend HashValue = extract("Hash[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend SourceSystem = extract("System[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | where SignatureStatus has_any ("Invalid", "Failed", "Mismatch", "Error")
+      | project TimeGenerated, UserName, RecordID, SignatureStatus, HashValue, SourceSystem
+    '''
+    queryFrequency: 'PT1H'
+    queryPeriod: 'PT6H'
+    triggerOperator: 'GreaterThan'
+    triggerThreshold: 0
+    suppressionDuration: 'PT1H'
+    suppressionEnabled: false
+    tactics: [
+      'Impact'
+      'DefenseEvasion'
+    ]
+    techniques: [
+      'T1565' // Data Manipulation
+      'T1562' // Impair Defenses
+    ]
+    entityMappings: [
+      {
+        entityType: 'Account'
+        fieldMappings: [
+          {
+            identifier: 'Name'
+            columnName: 'UserName'
+          }
+        ]
+      }
+    ]
+  }
+}
+
+// 8. After-Hours Research Access Detection
+resource afterHoursResearchRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' = {
+  name: guid(resourceNames.afterHoursResearchRule)
+  kind: 'Scheduled'
+  scope: sentinelWorkspace
+  properties: {
+    displayName: 'After-Hours Research Data Access'
+    description: 'Detects access to sensitive research data during non-business hours'
+    severity: 'Medium'
+    enabled: true
+    query: '''
+      // After-hours research access detection
+      union 
+        Custom-ELN_CL, 
+        Custom-LIMS_CL
+      | where RawData has_any ("Research", "Formula", "Confidential", "Restricted", "IP")
+      | extend UserName = extract("User[:\\s]+([\\w\\-\\.@]+)", 1, RawData)
+      | extend ResourceName = extract("Resource[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend AccessType = extract("AccessType[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend DataClassification = extract("Classification[:\\s]+([\\w\\-\\.]+)", 1, RawData)
+      | extend AccessHour = datetime_part("hour", TimeGenerated)
+      | extend AccessDay = datetime_part("weekday", TimeGenerated)
+      | where (AccessHour < 6 or AccessHour > 21 or AccessDay == 0 or AccessDay == 6)
+      | where DataClassification has_any ("IP", "Research", "Formula", "Confidential", "Restricted")
       | project 
           TimeGenerated, 
           UserName, 
-          UserDepartment, 
-          UserLocation, 
-          DocumentsDownloaded, 
-          TotalSize, 
-          Documents, 
-          DataClasses,
-          ClientIPs,
-          TimeStamps
+          ResourceName, 
+          AccessType, 
+          DataClassification, 
+          ['Access Hour'] = AccessHour,
+          ['Access Day'] = case(
+            AccessDay == 0, "Sunday",
+            AccessDay == 1, "Monday",
+            AccessDay == 2, "Tuesday",
+            AccessDay == 3, "Wednesday",
+            AccessDay == 4, "Thursday",
+            AccessDay == 5, "Friday",
+            AccessDay == 6, "Saturday",
+            "Unknown"
+          )
     '''
     queryFrequency: 'PT1H'
-    queryPeriod: 'PT6H'  // Extended to catch longer download patterns
+    queryPeriod: 'PT4H'
     triggerOperator: 'GreaterThan'
     triggerThreshold: 0
     suppressionDuration: 'PT1H'
@@ -117,184 +327,15 @@ resource elnMassDownloadRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' 
             columnName: 'UserName'
           }
         ]
-      },
-      {
-        entityType: 'IP'
-        fieldMappings: [
-          {
-            identifier: 'Address'
-            columnName: 'ClientIPs'
-          }
-        ]
       }
     ]
-    alertDetailsOverride: {
-      alertDisplayNameFormat: 'IP Theft Risk: {{UserName}} downloaded {{DocumentsDownloaded}} research documents'
-      alertDescriptionFormat: 'User {{UserName}} from {{UserDepartment}} has downloaded {{DocumentsDownloaded}} documents ({{TotalSize}} bytes) containing {{DataClasses}} data'
-    }
-    eventGroupingSettings: {
-      aggregationKind: 'SingleAlert'
-    }
-    incidentConfiguration: {
-      createIncident: true
-      groupingConfiguration: {
-        enabled: true
-        reopenClosedIncident: false
-        lookbackDuration: 'PT5H'
-        matchingMethod: 'AllEntities'
-        groupByEntities: [
-          'Account'
-        ]
-        groupByAlertDetails: []
-        groupByCustomDetails: []
-      }
-    }
-    customDetails: {
-      Department: 'UserDepartment'
-      Location: 'UserLocation'
-      DocumentTypes: 'Documents'
-      DataClassifications: 'DataClasses'
-      DownloadTimestamps: 'TimeStamps'
-    }
   }
 }
 
-// 2. Clinical Trial Data Protection - Unauthorized PHI Access (Enhanced)
-resource phiAccessRule 'Microsoft.SecurityInsights/alertRules@2023-05-01' = {
-  name: guid(resourceNames.phiAccessRule)
-  kind: 'Scheduled'
-  scope: sentinelWorkspace
-  properties: {
-    displayName: 'Clinical Trial Data - Unauthorized PHI Access'
-    description: 'This rule detects unauthorized access to patient health information in clinical trial systems with enhanced detection for bulk access'
-    severity: 'High'
-    enabled: true
-    query: '''
-      // Enhanced to detect unauthorized bulk access to PHI
-      union 
-        Custom-CTMS_CL, 
-        Custom-PV_CL
-      | where RawData has_any ("PHI", "PII", "Patient", "Subject", "Data", "File", "Record", "Database") 
-      and RawData has_any ("Access", "View", "Open", "Download", "Export", "Query", "Get")
-      | extend UserName = extract("User[:\\s]+([\\w\\-\\.@]+)", 1, RawData)
-      | extend SubjectID = extract("Subject[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend StudyID = extract("Study[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend AccessType = extract("AccessType[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend AuthStatus = extract("Status[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend PatientCount = extract("PatientCount[:\\s]+(\\d+)", 1, RawData)
-      | extend RecordCount = extract("Count[:\\s]+(\\d+)", 1, RawData)
-      | extend Reason = extract("Reason[:\\s]+([\\w\\-\\.\\s]+)", 1, RawData)
-      | extend UserRole = extract("Role[:\\s]+([\\w\\-\\.\\s]+)", 1, RawData)
-      | extend ClientIP = extract("IP[:\\s]+([\\d\\.]+)", 1, RawData)
-      | extend UserLocation = extract("Location[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      // Detect unauthorized access patterns
-      | where (
-          // Explicit denial
-          AuthStatus has_any ("Denied", "Failed", "Unauthorized", "Rejected") or
-          // Bulk access
-          AccessType has_any ("Bulk", "Export", "Full", "Mass", "All") or
-          // Large record counts
-          (isnotempty(PatientCount) and toint(PatientCount) > 10) or
-          (isnotempty(RecordCount) and toint(RecordCount) > 20) or
-          // Permissions mismatch (role doesn't match access pattern)
-          (isnotempty(UserRole) and isnotempty(AccessType) and (
-              (UserRole has_any("Nurse", "Coordinator") and AccessType has "Full") or
-              (UserRole has "Monitor" and AccessType has "Admin") or
-              (UserRole has "Data Entry" and AccessType has "Delete")
-          ))
-      )
-      // Add time window context to identify unusual access patterns
-      | summarize 
-          AccessCount = count(),
-          AccessTypes = make_set(AccessType, 10),
-          AuthStatuses = make_set(AuthStatus, 10),
-          Studies = make_set(StudyID, 10),
-          Subjects = make_set(SubjectID, 20),
-          ClientIPs = make_set(ClientIP, 10),
-          AccessTimes = make_set(TimeGenerated, 10)
-          by UserName, UserRole, UserLocation, bin(TimeGenerated, 1h)
-      | project 
-          TimeGenerated, 
-          UserName, 
-          UserRole,
-          UserLocation,
-          AccessCount,
-          AccessTypes,
-          AuthStatuses,
-          Studies,
-          Subjects,
-          ClientIPs,
-          AccessTimes
-    '''
-    queryFrequency: 'PT30M'
-    queryPeriod: 'PT2H'
-    triggerOperator: 'GreaterThan'
-    triggerThreshold: 0
-    suppressionDuration: 'PT1H'
-    suppressionEnabled: false
-    tactics: [
-      'Collection'
-      'Exfiltration'
-      'PrivilegeEscalation'
-    ]
-    techniques: [
-      'T1530' // Data from Cloud Storage
-      'T1213' // Data from Information Repositories
-      'T1078' // Valid Accounts
-    ]
-    entityMappings: [
-      {
-        entityType: 'Account'
-        fieldMappings: [
-          {
-            identifier: 'Name'
-            columnName: 'UserName'
-          }
-        ]
-      },
-      {
-        entityType: 'IP'
-        fieldMappings: [
-          {
-            identifier: 'Address'
-            columnName: 'ClientIPs'
-          }
-        ]
-      }
-    ]
-    alertDetailsOverride: {
-      alertDisplayNameFormat: 'PHI Access Alert: {{UserName}} - {{AccessCount}} suspicious accesses'
-      alertDescriptionFormat: 'Potentially unauthorized access to patient data. User {{UserName}} ({{UserRole}}) performed {{AccessCount}} suspicious accesses to clinical data from {{UserLocation}} with access types {{AccessTypes}}'
-    }
-    eventGroupingSettings: {
-      aggregationKind: 'SingleAlert'
-    }
-    incidentConfiguration: {
-      createIncident: true
-      groupingConfiguration: {
-        enabled: true
-        reopenClosedIncident: false
-        lookbackDuration: 'PT5H'
-        matchingMethod: 'AllEntities'
-        groupByEntities: [
-          'Account'
-        ]
-        groupByAlertDetails: []
-        groupByCustomDetails: []
-      }
-    }
-    customDetails: {
-      Role: 'UserRole'
-      Location: 'UserLocation'
-      Studies: 'Studies'
-      AccessStatus: 'AuthStatuses'
-      AccessTimes: 'AccessTimes'
-    }
-  }
-}
-
-// Additional rules would follow the same enhanced pattern
-
-// Output rule IDs for reference
-output elnMassDownloadRuleId string = elnMassDownloadRule.id
-output phiAccessRuleId string = phiAccessRule.id
+// Add output IDs for all new rules
+output gxpSystemChangeRuleId string = gxpSystemChangeRule.id
+output crossBorderIPAccessRuleId string = crossBorderIPAccessRule.id
+output coldChainAuthRuleId string = coldChainAuthRule.id
+output labInstrumentAnomalyRuleId string = labInstrumentAnomalyRule.id
+output electronicRecordIntegrityRuleId string = electronicRecordIntegrityRule.id
+output afterHoursResearchRuleId string = afterHoursResearchRule.id
