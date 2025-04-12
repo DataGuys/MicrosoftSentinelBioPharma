@@ -21,8 +21,10 @@ This implementation provides a comprehensive security monitoring solution using 
 Deploy this solution directly in Azure Cloud Shell:
 
 ```bash
-wget -O deploy.sh https://raw.githubusercontent.com/DataGuys/MicrosoftSentinelBioPharma/main/deploy.sh && chmod +x deploy.sh && ./deploy.sh -g "rg-sentinel-biopharma" -l "eastus2" -p "bp" -e "prod"
+mkdir -p ~/MicrosoftSentinelBioPharma && git clone https://github.com/DataGuys/MicrosoftSentinelBioPharma.git ~/MicrosoftSentinelBioPharma && cd ~/MicrosoftSentinelBioPharma && chmod +x *.sh && ./deploy.sh -g "rg-sentinel-biopharma" -l "eastus2" -p "bp" -e "prod"
 ```
+
+> **Note**: The code in this repository is currently in development status. You may encounter Bicep template errors during deployment that need to be addressed before deployment can succeed.
 
 ## Solution Components
 
