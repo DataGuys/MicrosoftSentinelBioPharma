@@ -2,7 +2,7 @@
 
 This repository contains a comprehensive implementation for deploying Azure Sentinel in large bio-pharmaceutical organizations with operations across multiple countries and complex regulatory requirements.
 
-![Bio-Pharma Sentinel Architecture](docs/images/biopharma-sentinel-architecture.png)
+![Bio-Pharma Sentinel Architecture](/architecture-diagram.svg)
 
 ## Overview
 
