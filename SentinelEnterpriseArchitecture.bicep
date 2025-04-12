@@ -1,14 +1,22 @@
-// Bio-Pharma Specialized Workspaces Module
+// Bio-Pharma Specialized Workspaces Module - Improved Architecture
 // Deploys Sentinel and specialized workspaces for bio-pharmaceutical organizations
 
 @description('The location for all resources')
 param location string
 
 @description('Prefix to use for resource naming')
-param prefix string
+param prefix string = 'bp'
+
+@description('Environment (dev, test, prod)')
+@allowed([
+  'dev'
+  'test'
+  'prod'
+])
+param environment string = 'prod'
 
 @description('Tags to apply to all resources')
-param tags object
+param tags object = {}
 
 @description('Default retention days for Log Analytics Workspaces')
 param defaultRetentionDays int = 2557  // 7 years for 21 CFR Part 11 compliance
@@ -23,10 +31,20 @@ param manufacturingRetentionDays int = 2557
 param clinicalRetentionDays int = 2557
 
 @description('Pricing tier for the central Sentinel workspace')
+@allowed([
+  'CapacityReservation'
+  'Free'
+  'LACluster'
+  'PerGB2018'
+  'PerNode'
+  'Premium'
+  'Standalone'
+  'Standard'
+])
 param sentinelWorkspaceSku string = 'PerGB2018'
 
 @description('Pricing tier for the specialized workspaces')
-param specializedWorkspaceSku string = 'Basic' // Cost-saving tier for high-volume data
+param specializedWorkspaceSku string = 'PerGB2018' // Changed from Basic to PerGB2018 for better feature support
 
 @description('Flag to deploy a Log Analytics Cluster instead of regular workspaces')
 param useLogAnalyticsCluster bool = false
@@ -46,19 +64,31 @@ param keyName string = ''
 @description('Key version in the Key Vault')
 param keyVersion string = ''
 
-// Variables
-var sentinelWorkspaceName = '${prefix}-sentinel-ws'
-var researchWorkspaceName = '${prefix}-research-ws'
-var manufacturingWorkspaceName = '${prefix}-manufacturing-ws'
-var clinicalWorkspaceName = '${prefix}-clinical-ws'
+// Variables - improved naming convention
+var resourceNames = {
+  sentinelWorkspace: '${prefix}-${environment}-sentinel-ws'
+  researchWorkspace: '${prefix}-${environment}-research-ws'
+  manufacturingWorkspace: '${prefix}-${environment}-manufacturing-ws'
+  clinicalWorkspace: '${prefix}-${environment}-clinical-ws'
+  laCluster: '${prefix}-${environment}-la-cluster'
+  queryPack: '${prefix}-${environment}-biopharma-queries'
+}
+
+// Improved tags that include standardized metadata
+var resourceTags = union(tags, {
+  'environment': environment
+  'application': 'Microsoft Sentinel'
+  'business-unit': 'Security'
+  'deployment-date': utcNow('yyyy-MM-dd')
+})
 
 // --------------------- LOG ANALYTICS CLUSTER (OPTIONAL) -----------------------
 
 // Log Analytics Cluster for high-volume bio-pharma environments
 resource laCluster 'Microsoft.OperationalInsights/clusters@2021-06-01' = if (useLogAnalyticsCluster) {
-  name: '${prefix}-la-cluster'
+  name: resourceNames.laCluster
   location: location
-  tags: tags
+  tags: resourceTags
   properties: {
     sku: {
       name: 'CapacityReservation'
@@ -76,9 +106,9 @@ resource laCluster 'Microsoft.OperationalInsights/clusters@2021-06-01' = if (use
 
 // 1. Central Sentinel Workspace for Global Security Operations
 resource sentinelWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: sentinelWorkspaceName
+  name: resourceNames.sentinelWorkspace
   location: location
-  tags: union(tags, {
+  tags: union(resourceTags, {
     'workspaceType': 'Global-SOC'
     'dataClassification': 'Confidential'
     'complianceFrameworks': 'GDPR,HIPAA,21CFR11,SOX'
@@ -91,19 +121,23 @@ resource sentinelWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
       immediatePurgeDataOn30Days: false // Disabled for compliance
+      disableLocalAuth: true // Enhanced security - require AAD auth
+      enableDataExport: true // Enable data export capability for compliance
     }
     clusterResourceId: useLogAnalyticsCluster ? laCluster.id : null
     workspaceCapping: {
       dailyQuotaGb: -1 // Unlimited
     }
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
   }
 }
 
 // 2. Research Workspace for intellectual property protection
 resource researchWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: researchWorkspaceName
+  name: resourceNames.researchWorkspace
   location: location
-  tags: union(tags, {
+  tags: union(resourceTags, {
     'workspaceType': 'Research'
     'dataClassification': 'Highly-Confidential'
     'complianceFrameworks': 'IP-Protection,SOX'
@@ -117,19 +151,23 @@ resource researchWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
       immediatePurgeDataOn30Days: false // Disabled for compliance and IP protection
+      disableLocalAuth: true // Enhanced security - require AAD auth
+      enableDataExport: true // Enable data export capability for IP traceability
     }
     clusterResourceId: useLogAnalyticsCluster ? laCluster.id : null
     workspaceCapping: {
       dailyQuotaGb: -1 // Unlimited
     }
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
   }
 }
 
 // 3. Manufacturing Workspace for GxP systems
 resource manufacturingWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: manufacturingWorkspaceName
+  name: resourceNames.manufacturingWorkspace
   location: location
-  tags: union(tags, {
+  tags: union(resourceTags, {
     'workspaceType': 'Manufacturing'
     'dataClassification': 'Confidential'
     'complianceFrameworks': '21CFR11,GxP,SOX'
@@ -143,19 +181,23 @@ resource manufacturingWorkspace 'Microsoft.OperationalInsights/workspaces@2022-1
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
       immediatePurgeDataOn30Days: false // Disabled for 21 CFR Part 11 compliance
+      disableLocalAuth: true // Enhanced security - require AAD auth
+      enableDataExport: true // Enable data export capability for audit trails
     }
     clusterResourceId: useLogAnalyticsCluster ? laCluster.id : null
     workspaceCapping: {
       dailyQuotaGb: -1 // Unlimited
     }
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
   }
 }
 
 // 4. Clinical Workspace for clinical trial and patient data
 resource clinicalWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
-  name: clinicalWorkspaceName
+  name: resourceNames.clinicalWorkspace
   location: location
-  tags: union(tags, {
+  tags: union(resourceTags, {
     'workspaceType': 'Clinical'
     'dataClassification': 'Protected-Health-Information'
     'complianceFrameworks': 'HIPAA,GDPR,21CFR11'
@@ -169,11 +211,15 @@ resource clinicalWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
       immediatePurgeDataOn30Days: false // Disabled for compliance
+      disableLocalAuth: true // Enhanced security - require AAD auth
+      enableDataExport: true // Enable data export capability for PII/PHI compliance
     }
     clusterResourceId: useLogAnalyticsCluster ? laCluster.id : null
     workspaceCapping: {
       dailyQuotaGb: -1 // Unlimited
     }
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
   }
 }
 
@@ -186,99 +232,52 @@ resource enableSentinel 'Microsoft.SecurityInsights/onboardingStates@2023-05-01'
 
 // Deploy cross-workspace query pack for bio-pharma global operations
 resource bioPharmaQueryPack 'Microsoft.OperationalInsights/queryPacks@2019-09-01' = {
-  name: '${prefix}-biopharma-queries'
+  name: resourceNames.queryPack
   location: location
-  tags: tags
+  tags: resourceTags
   properties: {
     displayName: 'Bio-Pharma Global Operations Queries'
     description: 'Cross-workspace queries for bio-pharmaceutical security operations'
   }
 }
 
-// Add bio-pharma specific queries to query pack
-resource crossWorkspaceIPQuery 'Microsoft.OperationalInsights/queryPacks/queries@2019-09-01' = {
-  parent: bioPharmaQueryPack
-  name: guid('ip-protection-cross-workspace')
-  properties: {
-    displayName: 'Cross-Workspace Intellectual Property Protection Query'
-    description: 'Monitors IP access across all workspaces'
-    body: '''
-      // Research system access data
-      let researchData = workspace("${researchWorkspaceName}").Custom-ELN_CL
-      | where TimeGenerated > ago(7d)
-      | where RawData has_any ("Access", "Download", "Export", "Print")
-      | extend UserName = extract("User[:\\s]+([\\w\\-\\.@]+)", 1, RawData)
-      | extend ResourceName = extract("Resource[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend DataClassification = extract("Classification[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | where DataClassification has_any ("IP", "Research", "Formula", "Confidential", "Restricted")
-      | project TimeGenerated, UserName, ResourceName, DataClassification, Source="Research";
-      
-      // Sentinel security events
-      let sentinelData = SigninLogs
-      | where TimeGenerated > ago(7d)
-      | project TimeGenerated, UserName=UserPrincipalName, IPAddress, Location, ResultType, Source="Sentinel";
-      
-      // Manufacturing system access (for formula access)
-      let manufacturingData = workspace("${manufacturingWorkspaceName}").Custom-MES_CL
-      | where TimeGenerated > ago(7d)
-      | where RawData has_any ("Recipe", "Formula", "Access")
-      | extend UserName = extract("User[:\\s]+([\\w\\-\\.@]+)", 1, RawData)
-      | extend ResourceName = extract("Resource[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | project TimeGenerated, UserName, ResourceName, Source="Manufacturing";
-      
-      // Combine and analyze
-      researchData
-      | union sentinelData, manufacturingData
-      | order by UserName asc, TimeGenerated asc
-    '''
-    tags: {
-      'purpose': 'IP-Protection'
-      'coverage': 'Global'
-      'criticality': 'High'
-    }
+// Added cross-workspace query examples
+module queryPackItems 'modules/queryPackItems.bicep' = {
+  name: 'bioPharmaQueryPackItems'
+  params: {
+    queryPackName: bioPharmaQueryPack.name
+    researchWorkspaceName: researchWorkspace.name
+    manufacturingWorkspaceName: manufacturingWorkspace.name
+    clinicalWorkspaceName: clinicalWorkspace.name
   }
 }
 
-resource crossWorkspaceGxPQuery 'Microsoft.OperationalInsights/queryPacks/queries@2019-09-01' = {
-  parent: bioPharmaQueryPack
-  name: guid('gxp-compliance-cross-workspace')
+// Diagnostic settings for monitoring the Sentinel workspaces
+resource sentinelDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: sentinelWorkspace
+  name: '${resourceNames.sentinelWorkspace}-diagnostics'
   properties: {
-    displayName: 'Cross-Workspace GxP Compliance Validation'
-    description: 'Confirms GxP system integrity across all workspaces'
-    body: '''
-      // Manufacturing GxP system validation status
-      let gxpStatus = workspace("${manufacturingWorkspaceName}").Custom-InstrumentQual_CL
-      | where TimeGenerated > ago(30d)
-      | where RawData has_any ("Validation", "Qualification", "Status")
-      | extend SystemName = extract("System[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend ValidationStatus = extract("ValidationStatus[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | project TimeGenerated, SystemName, ValidationStatus, Source="Manufacturing";
-      
-      // Sentinel security events for GxP systems
-      let sentinelGxPEvents = SecurityEvent
-      | where TimeGenerated > ago(30d)
-      | where Computer has_any ("GxP", "MES", "LIMS", "QMS")
-      | project TimeGenerated, Computer, Account, EventID, Activity, Source="Sentinel";
-      
-      // Clinical system validation events
-      let clinicalValidation = workspace("${clinicalWorkspaceName}").Custom-CTMS_CL
-      | where TimeGenerated > ago(30d)
-      | where RawData has_any ("Validation", "21CFR11", "Compliance")
-      | extend SystemName = extract("System[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | extend ComplianceStatus = extract("ComplianceStatus[:\\s]+([\\w\\-\\.]+)", 1, RawData)
-      | project TimeGenerated, SystemName, ComplianceStatus, Source="Clinical";
-      
-      // Combine for compliance overview
-      gxpStatus
-      | union sentinelGxPEvents, clinicalValidation
-      | order by TimeGenerated desc
-    '''
-    tags: {
-      'purpose': 'GxP-Compliance'
-      'coverage': 'Global'
-      'criticality': 'High'
-      'regulation': '21CFR11'
-    }
+    workspaceId: sentinelWorkspace.id
+    logs: [
+      {
+        category: 'Audit'
+        enabled: true
+        retentionPolicy: {
+          days: 365
+          enabled: true
+        }
+      }
+    ]
+    metrics: [
+      {
+        category: 'AllMetrics'
+        enabled: true
+        retentionPolicy: {
+          days: 365
+          enabled: true
+        }
+      }
+    ]
   }
 }
 
