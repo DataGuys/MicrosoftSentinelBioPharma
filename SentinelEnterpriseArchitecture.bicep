@@ -22,16 +22,16 @@ param tags object = {}
 param deploymentTimestamp string = utcNow('yyyy-MM-dd')
 
 @description('Default retention days for Log Analytics Workspaces')
-param defaultRetentionDays int = 2557  // 7 years for 21 CFR Part 11 compliance
+param defaultRetentionDays int = 90  // Default retention for free and PerGB2018 SKUs
 
 @description('Retention days for research data workspace')
-param researchRetentionDays int = 2557
+param researchRetentionDays int = 90
 
 @description('Retention days for manufacturing data workspace')
-param manufacturingRetentionDays int = 2557
+param manufacturingRetentionDays int = 90
 
 @description('Retention days for clinical data workspace')
-param clinicalRetentionDays int = 2557
+param clinicalRetentionDays int = 90
 
 @description('Pricing tier for the central Sentinel workspace')
 @allowed([
@@ -53,7 +53,7 @@ param specializedWorkspaceSku string = 'PerGB2018'
 param enableLongTermRetention bool = true
 
 @description('Archive retention period in days (days after which data is moved to archive)')
-param archiveRetentionDays int = 90
+param archiveRetentionDays int = 30
 
 @description('Flag to deploy a Log Analytics Cluster instead of regular workspaces')
 param useLogAnalyticsCluster bool = false
@@ -102,15 +102,15 @@ resource laCluster 'Microsoft.OperationalInsights/clusters@2021-06-01' = if (use
   location: location
   tags: mergedTags
   properties: {
-    sku: {
-      name: 'CapacityReservation'
-      capacity: laClusterCapacityReservationGB
-    }
     keyVaultProperties: enableCustomerManagedKey ? {
       keyVaultUri: keyVaultId
       keyName: keyName
       keyVersion: keyVersion
     } : null
+  }
+  sku: {
+    name: 'CapacityReservation'
+    capacity: laClusterCapacityReservationGB
   }
 }
 
@@ -127,7 +127,7 @@ resource sentinelWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
   })
   properties: {
     sku: {
-      name: useLogAnalyticsCluster ? 'LACluster' : sentinelWorkspaceSku
+      name: sentinelWorkspaceSku
     }
     retentionInDays: defaultRetentionDays
     features: {
@@ -136,7 +136,6 @@ resource sentinelWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
       disableLocalAuth: true // Enhanced security - require AAD auth
       enableDataExport: true // Enable data export capability for compliance
     }
-    clusterResourceId: useLogAnalyticsCluster ? laCluster.id : null
     workspaceCapping: {
       dailyQuotaGb: -1 // Unlimited
     }
@@ -166,7 +165,7 @@ resource researchWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
   })
   properties: {
     sku: {
-      name: useLogAnalyticsCluster ? 'LACluster' : specializedWorkspaceSku
+      name: specializedWorkspaceSku
     }
     retentionInDays: researchRetentionDays
     features: {
@@ -175,7 +174,6 @@ resource researchWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
       disableLocalAuth: true // Enhanced security - require AAD auth
       enableDataExport: true // Enable data export capability for IP traceability
     }
-    clusterResourceId: useLogAnalyticsCluster ? laCluster.id : null
     workspaceCapping: {
       dailyQuotaGb: -1 // Unlimited
     }
@@ -205,7 +203,7 @@ resource manufacturingWorkspace 'Microsoft.OperationalInsights/workspaces@2022-1
   })
   properties: {
     sku: {
-      name: useLogAnalyticsCluster ? 'LACluster' : specializedWorkspaceSku
+      name: specializedWorkspaceSku
     }
     retentionInDays: manufacturingRetentionDays
     features: {
@@ -214,7 +212,6 @@ resource manufacturingWorkspace 'Microsoft.OperationalInsights/workspaces@2022-1
       disableLocalAuth: true // Enhanced security - require AAD auth
       enableDataExport: true // Enable data export capability for audit trails
     }
-    clusterResourceId: useLogAnalyticsCluster ? laCluster.id : null
     workspaceCapping: {
       dailyQuotaGb: -1 // Unlimited
     }
@@ -244,7 +241,7 @@ resource clinicalWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
   })
   properties: {
     sku: {
-      name: useLogAnalyticsCluster ? 'LACluster' : specializedWorkspaceSku
+      name: specializedWorkspaceSku
     }
     retentionInDays: clinicalRetentionDays
     features: {
@@ -253,7 +250,6 @@ resource clinicalWorkspace 'Microsoft.OperationalInsights/workspaces@2022-10-01'
       disableLocalAuth: true // Enhanced security - require AAD auth
       enableDataExport: true // Enable data export capability for PII/PHI compliance
     }
-    clusterResourceId: useLogAnalyticsCluster ? laCluster.id : null
     workspaceCapping: {
       dailyQuotaGb: -1 // Unlimited
     }
